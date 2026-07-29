@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "type": "position.updated",
+  "eventId": "550e8400-e29b-41d4-a716-446655440012",
+  "pairId": "pair-abc123",
+  "actorId": "user-alice",
+  "deviceId": "device-mac-alice",
+  "sequence": 1,
+  "sentAt": "2026-07-29T20:00:00Z",
+  "payload": {
+    "dragSessionId": "550e8400-e29b-41d4-a716-446655440088",
+    "characterId": "char-alice",
+    "x": 1.5,
+    "y": -0.1
+  }
+}

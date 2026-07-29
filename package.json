@@ -1,0 +1,11 @@
+{
+  "name": "connectme",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix services/realtime-api run build",
+    "dev:realtime": "npm --prefix services/realtime-api run dev",
+    "start:realtime": "npm --prefix services/realtime-api start",
+    "test": "npm --prefix services/realtime-api test",
+    "ws:smoke": "npm --prefix services/realtime-api run ws:smoke"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "type": "foo.bar",
+  "eventId": "550e8400-e29b-41d4-a716-446655440010",
+  "pairId": "pair-abc123",
+  "actorId": "user-alice",
+  "deviceId": "device-mac-alice",
+  "sequence": 1,
+  "sentAt": "2026-07-29T20:00:00Z",
+  "payload": {}
+}

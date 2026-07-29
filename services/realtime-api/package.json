@@ -1,0 +1,28 @@
+{
+  "name": "pair-companion-realtime-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --import tsx/esm src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "ws:smoke": "node scripts/ws-smoke.mjs"
+  },
+  "dependencies": {
+    "@fastify/websocket": "^11",
+    "fastify": "^5",
+    "pino": "^9",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/ws": "^8",
+    "tsx": "^4",
+    "typescript": "^5",
+    "vitest": "^2",
+    "ws": "^8"
+  }
+}

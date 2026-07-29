@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "type": "emote.sent",
+  "eventId": "550e8400-e29b-41d4-a716-446655440002",
+  "pairId": "pair-abc123",
+  "actorId": "user-alice",
+  "deviceId": "device-mac-alice",
+  "sequence": 3,
+  "sentAt": "2026-07-29T20:00:10Z",
+  "payload": {
+    "gestureId": "E-01",
+    "requestId": "550e8400-e29b-41d4-a716-446655440099",
+    "ttlSeconds": 120
+  }
+}
