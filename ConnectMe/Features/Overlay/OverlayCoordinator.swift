@@ -39,6 +39,7 @@ final class OverlayCoordinator {
             rootView: AnyView(
                 OverlayHostView(dotStore: dotStore)
                     .environment(presenceEngine)
+                    .environment(WebSocketManager.shared)
                     .ignoresSafeArea()
             )
         )

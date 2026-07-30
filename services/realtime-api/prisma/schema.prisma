@@ -1,6 +1,3 @@
-// Prisma schema — Pair Companion realtime API
-// Week 4: stubs only. Full migrations begin in Week 5 (authentication and pairing).
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,58 +7,54 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  devices   Device[]
-  memberships PairMember[]
+// Mirrors the Supabase auth.users record. Created automatically on first
+// authenticated request; never deleted (pairs reference it).
+model Profile {
+  id        String   @id  // Supabase user UUID (matches auth.users.id)
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  pairMembership PairMember?
+  invitesCreated Invite[]
+
+  @@map("profiles")
 }
 
-model Device {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  publicKey String   // device identity key stored server-side
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Pair {
-  id        String      @id @default(cuid())
-  createdAt DateTime    @default(now())
-  members   PairMember[]
-  invites   Invite[]
-}
-
-model PairMember {
-  id          String   @id @default(cuid())
-  pairId      String
-  pair        Pair     @relation(fields: [pairId], references: [id])
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  characterId String   @unique  // one character per user per pair
-  joinedAt    DateTime @default(now())
-
-  @@unique([pairId, userId])
-}
-
+// Single-use, time-limited invite that creates a Pair on acceptance.
 model Invite {
-  id        String    @id @default(cuid())
-  pairId    String
-  pair      Pair      @relation(fields: [pairId], references: [id])
-  code      String    @unique
+  code      String    @id  // 6-character alphanumeric (nanoid)
+  creatorId String
+  creator   Profile   @relation(fields: [creatorId], references: [id])
+
+  pairId    String?
+  pair      Pair?     @relation(fields: [pairId], references: [id])
+
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("invites")
 }
 
-model Session {
-  id           String    @id @default(cuid())
-  userId       String
-  deviceId     String
-  refreshToken String    @unique  // hashed
-  revokedAt    DateTime?
-  createdAt    DateTime  @default(now())
-  expiresAt    DateTime
+// A relationship between exactly two people.
+model Pair {
+  id        String       @id @default(uuid())
+  members   PairMember[]
+  invites   Invite[]
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  @@map("pairs")
+}
+
+// Enforces the 2-person constraint: userId is @unique so each user
+// can belong to at most one pair at a time.
+model PairMember {
+  pairId String
+  userId String @unique  // one active pair per user
+
+  pair    Pair    @relation(fields: [pairId], references: [id])
+  profile Profile @relation(fields: [userId], references: [id])
+
+  @@id([pairId, userId])
+  @@map("pair_members")
 }

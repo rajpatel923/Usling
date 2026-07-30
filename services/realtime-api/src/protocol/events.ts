@@ -6,6 +6,8 @@ import { BaseEnvelopeSchema, type ParseResult } from './envelope.js'
 const CoarsePresenceState = z.enum(['active', 'away', 'sleeping', 'unavailable'])
 
 const payloads = {
+  'session.ready': z.object({ pairId: z.string() }),
+
   'heartbeat': z.object({}),
 
   'presence.updated': z.object({

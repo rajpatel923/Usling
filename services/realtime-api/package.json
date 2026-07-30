@@ -4,25 +4,38 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --import tsx/esm src/server.ts",
-    "dev": "tsx watch src/server.ts",
+    "start": "node --env-file=.env --import tsx/esm src/server.ts",
+    "dev": "tsx watch --env-file=.env src/server.ts",
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "ws:smoke": "node scripts/ws-smoke.mjs"
   },
   "dependencies": {
+    "@fastify/jwt": "^9",
     "@fastify/websocket": "^11",
+    "@prisma/client": "^6",
     "fastify": "^5",
+    "fastify-plugin": "^5",
+    "nanoid": "^5",
     "pino": "^9",
     "zod": "^3"
   },
   "devDependencies": {
     "@types/node": "^22",
     "@types/ws": "^8",
+    "prisma": "^6",
     "tsx": "^4",
     "typescript": "^5",
     "vitest": "^2",
     "ws": "^8"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.1": true,
+    "esbuild@0.21.5": true,
+    "fsevents@2.3.3": true,
+    "prisma@6.19.3": true
   }
 }

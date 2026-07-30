@@ -4,24 +4,25 @@ import SwiftUI
 /// Owns both dot positions; only the owned dot is draggable.
 struct OverlayHostView: View {
     @Environment(PresenceEngine.self) private var presenceEngine
+    @Environment(WebSocketManager.self) private var wsManager
 
     /// Shared with ClickThroughView so AppKit knows where the interactive area is.
     let dotStore: DotPositionStore
 
     @State private var myPosition: CGPoint = .zero
-    @State private var partnerPosition: CGPoint = CGPoint(x: 120, y: 120)
+    @State private var dragSessionId: String = UUID().uuidString
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 Color.clear
 
-                // Partner dot — not draggable
+                // Partner dot — position driven by server events
                 DotView(
                     ownership: .partner,
-                    animationState: presenceEngine.localState.dotAnimationState
+                    animationState: presenceEngine.partnerState.dotAnimationState
                 )
-                .position(partnerPosition)
+                .position(denormalized(presenceEngine.partnerNormalizedPosition, in: geo.size))
 
                 // My dot — draggable; updates dotStore so ClickThroughView stays in sync
                 DotView(
@@ -35,11 +36,18 @@ struct OverlayHostView: View {
                             let pos = clamped(value.location, in: geo.size)
                             myPosition = pos
                             dotStore.myPosition = pos
+                            let norm = normalized(pos, in: geo.size)
+                            wsManager.sendPositionUpdate(
+                                characterId: KeychainManager.shared.userId ?? "me",
+                                dragSessionId: dragSessionId,
+                                x: norm.x, y: norm.y
+                            )
                         }
                         .onEnded { value in
                             let pos = clamped(value.location, in: geo.size)
                             myPosition = pos
                             dotStore.myPosition = pos
+                            dragSessionId = UUID().uuidString // new ID for next drag
                         }
                 )
                 .onHover { inside in
@@ -51,8 +59,9 @@ struct OverlayHostView: View {
                 let cx = geo.size.width / 2
                 let cy = geo.size.height / 2
                 myPosition = CGPoint(x: cx - 70, y: cy)
-                partnerPosition = CGPoint(x: cx + 70, y: cy)
                 dotStore.myPosition = myPosition
+                // Start at default partner position until first server event
+                presenceEngine.partnerNormalizedPosition = CGPoint(x: 0.6, y: 0.5)
             }
         }
     }
@@ -63,5 +72,13 @@ struct OverlayHostView: View {
             x: max(margin, min(size.width - margin, point.x)),
             y: max(margin, min(size.height - margin, point.y))
         )
+    }
+
+    private func normalized(_ point: CGPoint, in size: CGSize) -> CGPoint {
+        CGPoint(x: point.x / size.width, y: point.y / size.height)
+    }
+
+    private func denormalized(_ point: CGPoint, in size: CGSize) -> CGPoint {
+        CGPoint(x: point.x * size.width, y: point.y * size.height)
     }
 }

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.connectme.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>connectme</string>
+			</array>
+		</dict>
+	</array>
+	<key>SUPABASE_ANON_KEY</key>
+	<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqZGhwd2hxdXFxb29pd25rZGd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU0NDE3ODAsImV4cCI6MjEwMTAxNzc4MH0.ZLFMGZc8acnRctWlY38dAKFfgZZZakmIQj1daJ9spOI</string>
+	<key>API_BASE_URL</key>
+	<string>http://localhost:3000</string>
+	<key>SUPABASE_URL</key>
+	<string>https://ajdhpwhquqqooiwnkdgy.supabase.co</string>
+</dict>
+</plist>

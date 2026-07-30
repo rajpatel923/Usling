@@ -7,6 +7,15 @@ import Observation
 final class PresenceEngine {
     private(set) var localState: PresenceState = .active
 
+    /// Partner's most-recently-received coarse presence state.
+    private(set) var partnerState: PresenceState = .active
+
+    /// Partner's most-recently-received normalized position (0–1 each axis).
+    var partnerNormalizedPosition: CGPoint = CGPoint(x: 0.6, y: 0.5)
+
+    /// Called whenever localState changes. Used by AppDelegate to bridge to WebSocketManager.
+    var onStateChange: ((PresenceState) -> Void)?
+
     /// Configurable idle threshold (seconds). Default: 5 minutes.
     var idleThreshold: TimeInterval = 300
 
@@ -15,6 +24,16 @@ final class PresenceEngine {
 
     // Dwell timers — cancelled when a competing event arrives.
     private var dwellTask: Task<Void, Never>?
+
+    // MARK: - Partner updates (called by WebSocketManager)
+
+    func applyPartnerPresence(_ state: PresenceState) {
+        partnerState = state
+    }
+
+    func applyPartnerPosition(x: Double, y: Double) {
+        partnerNormalizedPosition = CGPoint(x: x, y: y)
+    }
 
     convenience init() {
         self.init(sensors: SystemSensorMonitor())
@@ -64,6 +83,7 @@ final class PresenceEngine {
     private func transition(to newState: PresenceState, dwell: TimeInterval) {
         dwellTask?.cancel()
         localState = newState
+        onStateChange?(newState)
     }
 
     private func transitionAfterDwell(to newState: PresenceState, seconds: TimeInterval) {

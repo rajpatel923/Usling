@@ -1,0 +1,29 @@
+# --- Secrets ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# --- macOS ---
+.DS_Store
+
+# --- Xcode / Swift ---
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+.swiftpm/
+Package.resolved
+
+# --- Node / TypeScript (services/) ---
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+coverage/
