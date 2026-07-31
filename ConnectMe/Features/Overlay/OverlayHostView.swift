@@ -11,18 +11,44 @@ struct OverlayHostView: View {
 
     @State private var myPosition: CGPoint = .zero
     @State private var dragSessionId: String = UUID().uuidString
+    @State private var showMessagePanel = false
+
+    private var messageManager: MessageManager { MessageManager.shared }
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 Color.clear
 
-                // Partner dot — position driven by server events
-                DotView(
-                    ownership: .partner,
-                    animationState: presenceEngine.partnerState.dotAnimationState
-                )
-                .position(denormalized(presenceEngine.partnerNormalizedPosition, in: geo.size))
+                // Partner dot — tappable for messaging; badge shows unread count
+                let partnerPos = denormalized(presenceEngine.partnerNormalizedPosition, in: geo.size)
+                ZStack(alignment: .topTrailing) {
+                    DotView(
+                        ownership: .partner,
+                        animationState: presenceEngine.partnerState.dotAnimationState
+                    )
+                    if messageManager.unreadCount > 0 {
+                        Text("\(messageManager.unreadCount)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(.red, in: Capsule())
+                            .offset(x: 8, y: -8)
+                    }
+                }
+                .position(partnerPos)
+                .onTapGesture { showMessagePanel = true }
+                .popover(isPresented: $showMessagePanel, arrowEdge: .bottom) {
+                    if messageManager.unreadCount > 0 {
+                        InboxView(messageManager: messageManager, wsManager: wsManager)
+                    } else {
+                        ComposeView(messageManager: messageManager, wsManager: wsManager)
+                    }
+                }
+                .onChange(of: partnerPos) {
+                    dotStore.partnerPosition = partnerPos
+                }
 
                 // My dot — draggable; updates dotStore so ClickThroughView stays in sync
                 DotView(
@@ -47,7 +73,7 @@ struct OverlayHostView: View {
                             let pos = clamped(value.location, in: geo.size)
                             myPosition = pos
                             dotStore.myPosition = pos
-                            dragSessionId = UUID().uuidString // new ID for next drag
+                            dragSessionId = UUID().uuidString
                         }
                 )
                 .onHover { inside in
@@ -60,8 +86,9 @@ struct OverlayHostView: View {
                 let cy = geo.size.height / 2
                 myPosition = CGPoint(x: cx - 70, y: cy)
                 dotStore.myPosition = myPosition
-                // Start at default partner position until first server event
                 presenceEngine.partnerNormalizedPosition = CGPoint(x: 0.6, y: 0.5)
+                // Set immediately so hitTest has the correct position before onChange fires
+                dotStore.partnerPosition = denormalized(CGPoint(x: 0.6, y: 0.5), in: geo.size)
             }
         }
     }

@@ -36,9 +36,8 @@ final class PairingManager {
         errorMessage = nil
         defer { isLoading = false }
 
-        guard let token = keychain.accessToken else { return nil }
-
         do {
+            let token = try await auth.ensureValidToken()
             let url = apiBase.appending(path: "/pair/invite")
             // No request body — omit Content-Type to avoid Fastify's empty-JSON-body error
             var req = URLRequest(url: url)
@@ -65,9 +64,8 @@ final class PairingManager {
         errorMessage = nil
         defer { isLoading = false }
 
-        guard let token = keychain.accessToken else { return false }
-
         do {
+            let token = try await auth.ensureValidToken()
             let url = apiBase.appending(path: "/pair/accept")
             var req = URLRequest(url: url)
             req.httpMethod = "POST"

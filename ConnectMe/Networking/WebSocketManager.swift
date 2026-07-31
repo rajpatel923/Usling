@@ -30,6 +30,12 @@ struct SessionReadyEvent: Decodable {
     let payload: Payload
 }
 
+struct MessageSentEvent: Decodable {
+    struct Payload: Decodable { let messageId: String; let content: String; let sentAt: String }
+    let actorId: String
+    let payload: Payload
+}
+
 // MARK: - Outgoing event builder
 
 private struct OutgoingEvent<P: Encodable>: Encodable {
@@ -55,12 +61,14 @@ final class WebSocketManager {
     enum ConnectionState { case disconnected, connecting, connected }
     private(set) var connectionState: ConnectionState = .disconnected
 
-    // Callbacks — set by AppDelegate after both managers are created
-    var onPresenceUpdated: ((String, String) -> Void)?   // actorId, state
-    var onPositionUpdated: ((String, Double, Double) -> Void)?  // actorId, x, y
+    // Callbacks — set by ConnectMeApp after managers are wired
+    var onPresenceUpdated: ((String, String) -> Void)?                   // actorId, state
+    var onPositionUpdated: ((String, Double, Double) -> Void)?           // actorId, x, y
+    var onMessageReceived: ((String, String, Date) -> Void)?             // messageId, content, sentAt
 
     private let keychain = KeychainManager.shared
     private var wsTask: URLSessionWebSocketTask?
+    private var currentPairId: String?
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var reconnectAttempts = 0
@@ -71,7 +79,7 @@ final class WebSocketManager {
 
     private let apiBase: URL = {
         let str = Bundle.main.infoDictionary?["API_BASE_URL"] as? String
-                  ?? "http://localhost:3001"
+                  ?? "http://localhost:3000"
         return URL(string: str)!
     }()
 
@@ -83,15 +91,19 @@ final class WebSocketManager {
         guard connectionState == .disconnected else { return }
         connectionState = .connecting
 
-        guard let token = keychain.accessToken,
-              let userId = keychain.userId,
-              let pairId = keychain.pairId else {
+        guard let userId = keychain.userId else {
             connectionState = .disconnected
             return
         }
 
-        // Resolve WebSocket URL from the /session endpoint
-        guard let wsURL = await resolveWSURL(token: token) else {
+        // Get a fresh (auto-refreshed) token
+        guard let token = try? await AuthManager.shared.ensureValidToken() else {
+            connectionState = .disconnected
+            return
+        }
+
+        // Resolve WebSocket URL + pairId from the /session endpoint
+        guard let (wsURL, pairId) = await resolveSession(token: token) else {
             scheduleReconnect()
             return
         }
@@ -105,6 +117,7 @@ final class WebSocketManager {
 
         connectionState = .connected
         reconnectAttempts = 0
+        currentPairId = pairId
 
         startReceiving(task: task, userId: userId, pairId: pairId)
         flushQueue()
@@ -121,7 +134,7 @@ final class WebSocketManager {
     // MARK: - Send helpers
 
     func sendPresenceUpdate(state: String) {
-        guard let pairId = keychain.pairId, let userId = keychain.userId else { return }
+        guard let pairId = currentPairId ?? keychain.pairId, let userId = keychain.userId else { return }
         struct Payload: Encodable { let state: String }
         enqueue(OutgoingEvent(type: "presence.updated", pairId: pairId, actorId: userId,
                               deviceId: keychain.deviceId, sentAt: iso8601Now(),
@@ -129,7 +142,7 @@ final class WebSocketManager {
     }
 
     func sendPositionUpdate(characterId: String, dragSessionId: String, x: Double, y: Double) {
-        guard let pairId = keychain.pairId, let userId = keychain.userId else { return }
+        guard let pairId = currentPairId ?? keychain.pairId, let userId = keychain.userId else { return }
         struct Payload: Encodable {
             let dragSessionId: String; let characterId: String
             let x: Double; let y: Double
@@ -138,6 +151,14 @@ final class WebSocketManager {
                               deviceId: keychain.deviceId, sentAt: iso8601Now(),
                               payload: Payload(dragSessionId: dragSessionId,
                                                characterId: characterId, x: x, y: y)))
+    }
+
+    func sendMessageAck(messageId: String) {
+        guard let pairId = currentPairId ?? keychain.pairId, let userId = keychain.userId else { return }
+        struct Payload: Encodable { let messageId: String }
+        enqueue(OutgoingEvent(type: "message.ack", pairId: pairId, actorId: userId,
+                              deviceId: keychain.deviceId, sentAt: iso8601Now(),
+                              payload: Payload(messageId: messageId)))
     }
 
     // MARK: - Private: receive loop
@@ -182,6 +203,11 @@ final class WebSocketManager {
         case "position.updated":
             if let event = try? decoder.decode(PositionUpdatedEvent.self, from: data) {
                 onPositionUpdated?(event.actorId, event.payload.x, event.payload.y)
+            }
+        case "message.sent":
+            if let event = try? decoder.decode(MessageSentEvent.self, from: data) {
+                let sentAt = ISO8601DateFormatter().date(from: event.payload.sentAt) ?? Date()
+                onMessageReceived?(event.payload.messageId, event.payload.content, sentAt)
             }
         default:
             break
@@ -228,17 +254,17 @@ final class WebSocketManager {
 
     // MARK: - Private: session resolution
 
-    private func resolveWSURL(token: String) async -> URL? {
+    private func resolveSession(token: String) async -> (URL, String)? {
         let url = apiBase.appending(path: "/session")
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        struct SessionResponse: Decodable { let wsUrl: String }
+        struct SessionResponse: Decodable { let wsUrl: String; let pairId: String }
         guard let (data, _) = try? await URLSession.shared.data(for: req),
               let body = try? JSONDecoder().decode(SessionResponse.self, from: data),
               let wsURL = URL(string: body.wsUrl) else { return nil }
-        return wsURL
+        return (wsURL, body.pairId)
     }
 
     // MARK: - Utilities

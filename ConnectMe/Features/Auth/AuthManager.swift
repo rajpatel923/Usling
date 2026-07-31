@@ -77,6 +77,22 @@ final class AuthManager {
         userEmail = nil
     }
 
+    /// Returns a valid access token, refreshing it automatically if expired or about to expire.
+    /// Throws `URLError(.userAuthenticationRequired)` if unauthenticated or refresh fails.
+    func ensureValidToken() async throws -> String {
+        guard let token = keychain.accessToken else {
+            throw URLError(.userAuthenticationRequired)
+        }
+        if let expiry = jwtExpiry(token), expiry < Date().addingTimeInterval(60) {
+            let ok = await refreshSession()
+            if !ok { signOut(); throw URLError(.userAuthenticationRequired) }
+        }
+        guard let fresh = keychain.accessToken else {
+            throw URLError(.userAuthenticationRequired)
+        }
+        return fresh
+    }
+
     /// Refreshes the session using the stored refresh token. Returns true on success.
     @discardableResult
     func refreshSession() async -> Bool {
@@ -145,17 +161,28 @@ final class AuthManager {
 
     // MARK: - JWT payload decoder
 
+    private func jwtExpiry(_ token: String) -> Date? {
+        guard let json = jwtClaims(token),
+              let exp = json["exp"] as? TimeInterval else { return nil }
+        return Date(timeIntervalSince1970: exp)
+    }
+
     private func jwtPayload(_ token: String) -> (String?, String?) {
+        guard let json = jwtClaims(token) else { return (nil, nil) }
+        return (json["sub"] as? String, json["email"] as? String)
+    }
+
+    private func jwtClaims(_ token: String) -> [String: Any]? {
         let parts = token.split(separator: ".")
-        guard parts.count >= 2 else { return (nil, nil) }
+        guard parts.count >= 2 else { return nil }
         var b64 = String(parts[1])
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
         while b64.count % 4 != 0 { b64 += "=" }
         guard let data = Data(base64Encoded: b64),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return (nil, nil) }
-        return (json["sub"] as? String, json["email"] as? String)
+        else { return nil }
+        return json
     }
 }
 
@@ -188,3 +215,5 @@ private struct SupabaseError: Decodable {
     let message: String?
     let error_description: String?
 }
+
+

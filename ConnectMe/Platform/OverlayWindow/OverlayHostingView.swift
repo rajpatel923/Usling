@@ -10,12 +10,11 @@ final class OverlayHostingView: NSHostingView<AnyView> {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let store = dotStore else { return nil }
-        // point arrives in the superview's coordinate system (AppKit bottom-left origin).
-        // NSHostingView.isFlipped == true, so converting to our own space gives top-left
-        // origin coordinates that match store.myPosition (set from SwiftUI's GeometryReader).
         let localPoint = convert(point, from: superview)
-        let d = hypot(localPoint.x - store.myPosition.x, localPoint.y - store.myPosition.y)
-        guard d <= store.hitRadius else { return nil }
-        return super.hitTest(point)
+        let myDist      = hypot(localPoint.x - store.myPosition.x,      localPoint.y - store.myPosition.y)
+        let partnerDist = hypot(localPoint.x - store.partnerPosition.x, localPoint.y - store.partnerPosition.y)
+        guard myDist <= store.hitRadius || partnerDist <= store.hitRadius else { return nil }
+        // SwiftUI returns nil for Color.clear regions; fall back to self so the tap event reaches SwiftUI
+        return super.hitTest(point) ?? self
     }
 }

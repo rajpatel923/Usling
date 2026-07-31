@@ -75,6 +75,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wsManager.onPositionUpdated = { [weak self] _, x, y in
             self?.presenceEngine.applyPartnerPosition(x: x, y: y)
         }
+        wsManager.onMessageReceived = { messageId, content, sentAt in
+            Task { @MainActor in
+                MessageManager.shared.receive(IncomingMessage(id: messageId, content: content, sentAt: sentAt))
+            }
+        }
     }
 
     private func checkSetupProgress() {
@@ -102,9 +107,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showSetupWindow() {
         NSApp.setActivationPolicy(.regular)
 
-        let view = SetupFlow()
-            .environment(auth)
-            .environment(pairing)
+        let view = SetupFlow(onTestOverlay: { [weak self] in
+            self?.setupWindow?.close()
+            self?.startOverlay()
+        })
+        .environment(auth)
+        .environment(pairing)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 380, height: 320),
@@ -125,12 +133,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 private struct SetupFlow: View {
     @Environment(AuthManager.self) private var auth
     @Environment(PairingManager.self) private var pairing
+    var onTestOverlay: (() -> Void)? = nil
 
     var body: some View {
         if !auth.isAuthenticated {
             OnboardingView()
+                .safeOverlay(label: onTestOverlay)
         } else if !pairing.isPaired {
             PairingView()
+                .safeOverlay(label: onTestOverlay)
         } else {
             VStack(spacing: 12) {
                 Image(systemName: "checkmark.circle.fill")
@@ -141,5 +152,24 @@ private struct SetupFlow: View {
             }
             .frame(width: 380, height: 260)
         }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func safeOverlay(label action: (() -> Void)?) -> some View {
+        #if DEBUG
+        self.overlay(alignment: .bottomTrailing) {
+            if let action {
+                Button("Test Overlay") { action() }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(10)
+            }
+        }
+        #else
+        self
+        #endif
     }
 }
