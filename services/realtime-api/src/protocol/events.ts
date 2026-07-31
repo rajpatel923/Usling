@@ -70,6 +70,16 @@ const payloads = {
     reasonCategory: z.enum(['unpaired', 'blocked', 'admin']),
   }),
 
+  'message.sent': z.object({
+    messageId: z.string().uuid(),
+    content:   z.string().max(140),
+    sentAt:    z.string().datetime(),
+  }),
+
+  'message.ack': z.object({
+    messageId: z.string().uuid(),
+  }),
+
   'error': z.object({
     code: z.string(),
     message: z.string(),

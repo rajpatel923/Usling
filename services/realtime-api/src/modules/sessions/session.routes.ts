@@ -9,21 +9,30 @@ import { config } from '../../config/index.js'
 export async function registerSessionRoutes(app: FastifyInstance) {
   app.post('/session', { preHandler: [app.authenticate] }, async (req, reply) => {
     const user = req.authUser
-    const pairId = await pairingService.getPairId(user.id)
+    const wsProto = config.APP_ENV === 'production' ? 'wss' : 'ws'
+    const wsHost = `${config.HTTP_HOST === '0.0.0.0' ? 'localhost' : config.HTTP_HOST}:${config.HTTP_PORT}`
 
+    // Dev bypass: skip DB when DATABASE_URL is missing or clearly invalid (no valid host)
+    const dbReady = config.DATABASE_URL?.includes('.pooler.supabase.com') || config.DATABASE_URL?.includes('localhost')
+    if (config.APP_ENV === 'development' && !dbReady) {
+      const pairId = 'dev-pair-1'
+      return reply.send({
+        userId: user.id,
+        pairId,
+        wsUrl: `${wsProto}://${wsHost}/ws?devPairId=${pairId}`,
+        expiresIn: 3600,
+      })
+    }
+
+    const pairId = await pairingService.getPairId(user.id)
     if (!pairId) {
       return reply.code(403).send({ error: 'Not paired. Accept an invite first.' })
     }
 
-    const wsProto = config.APP_ENV === 'production' ? 'wss' : 'ws'
-    const wsHost = `${config.HTTP_HOST === '0.0.0.0' ? 'localhost' : config.HTTP_HOST}:${config.HTTP_PORT}`
-    const wsUrl = `${wsProto}://${wsHost}/ws`
-
     return reply.send({
       userId: user.id,
       pairId,
-      wsUrl,
-      // Client should reconnect 5 minutes before this to refresh
+      wsUrl: `${wsProto}://${wsHost}/ws`,
       expiresIn: 3600,
     })
   })

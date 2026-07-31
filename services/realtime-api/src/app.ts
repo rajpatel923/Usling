@@ -5,6 +5,7 @@ import { registerHealthRoutes } from './modules/health/health.routes.js'
 import { registerRealtimeRoutes } from './modules/realtime/realtime.handler.js'
 import { registerPairingRoutes } from './modules/pairing/pairing.routes.js'
 import { registerSessionRoutes } from './modules/sessions/session.routes.js'
+import { registerMessageRoutes } from './modules/messages/message.routes.js'
 import jwtAuthPlugin from './plugins/jwt-auth.js'
 
 export async function buildApp() {
@@ -22,6 +23,7 @@ export async function buildApp() {
   await app.register(registerPairingRoutes)
   await app.register(registerSessionRoutes)
   await app.register(registerRealtimeRoutes)
+  await app.register(registerMessageRoutes)
 
   return app
 }

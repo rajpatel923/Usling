@@ -1,25 +1,11 @@
 import fp from 'fastify-plugin'
-import fastifyJwt from '@fastify/jwt'
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { config } from '../config/index.js'
 
 export interface AuthUser {
-  id: string    // Supabase user UUID (JWT 'sub' claim)
+  id: string
   email: string
   role: string
-}
-
-declare module '@fastify/jwt' {
-  interface FastifyJWT {
-    payload: {
-      sub: string
-      email: string
-      role: string
-      aud: string
-      exp: number
-    }
-    user: AuthUser
-  }
 }
 
 declare module 'fastify' {
@@ -31,10 +17,29 @@ declare module 'fastify' {
   }
 }
 
+async function verifySupabaseToken(token: string, supabaseUrl: string, anonKey: string): Promise<AuthUser> {
+  const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: anonKey,
+    },
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Supabase auth rejected token: ${res.status} ${body}`)
+  }
+
+  const user = (await res.json()) as { id: string; email: string; role: string }
+  return { id: user.id, email: user.email ?? '', role: user.role ?? 'authenticated' }
+}
+
 async function jwtAuthPlugin(app: FastifyInstance) {
-  if (!config.SUPABASE_JWT_SECRET) {
-    app.log.warn('SUPABASE_JWT_SECRET not set — JWT auth disabled (dev mode only)')
-    // Provide a no-op authenticate for dev convenience
+  const supabaseUrl = config.SUPABASE_URL
+  const supabaseAnonKey = config.SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    app.log.warn('SUPABASE_URL or SUPABASE_ANON_KEY not set — JWT auth disabled (dev mode only)')
     app.decorate('authenticate', async () => {})
     app.addHook('onRequest', async (req) => {
       req.authUser = { id: 'dev-user', email: 'dev@example.com', role: 'authenticated' }
@@ -42,22 +47,19 @@ async function jwtAuthPlugin(app: FastifyInstance) {
     return
   }
 
-  await app.register(fastifyJwt, {
-    secret: config.SUPABASE_JWT_SECRET,
-    // Supabase JWTs target the "authenticated" audience
-    verify: { allowedAud: 'authenticated' },
-  })
-
   app.decorate('authenticate', async (req: FastifyRequest, reply: FastifyReply) => {
+    const header = req.headers.authorization
+    if (!header?.startsWith('Bearer ')) {
+      app.log.warn({ reqId: req.id }, 'Missing or malformed Authorization header')
+      return reply.code(401).send({ error: 'Unauthorized' })
+    }
+
+    const token = header.slice(7)
     try {
-      const payload = await req.jwtVerify<{ sub: string; email: string; role: string }>()
-      req.authUser = {
-        id: payload.sub,
-        email: payload.email,
-        role: payload.role,
-      }
-    } catch {
-      reply.code(401).send({ error: 'Unauthorized' })
+      req.authUser = await verifySupabaseToken(token, supabaseUrl, supabaseAnonKey)
+    } catch (err) {
+      app.log.warn({ reqId: req.id, err }, 'JWT verification failed')
+      return reply.code(401).send({ error: 'Unauthorized' })
     }
   })
 }

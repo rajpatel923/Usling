@@ -54,4 +54,12 @@ export class ConnectionRegistry {
     }
     return result
   }
+
+  /** True if the given user has at least one open socket in this pair. */
+  isUserConnected(pairId: string, userId: string): boolean {
+    return (this.pairs.get(pairId)?.get(userId)?.size ?? 0) > 0
+  }
 }
+
+/** Shared singleton — imported by both the WS handler and HTTP message routes. */
+export const registry = new ConnectionRegistry()

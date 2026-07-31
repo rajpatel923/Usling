@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from '@fastify/websocket'
 import { parseEvent } from '../../protocol/events.js'
-import { ConnectionRegistry } from './connection-registry.js'
+import { ConnectionRegistry, registry } from './connection-registry.js'
 import { validateOwnership } from './ownership-validator.js'
 import { pairingService } from '../pairing/pairing.service.js'
+import { messageService } from '../messages/message.service.js'
 import { config } from '../../config/index.js'
-
-const registry = new ConnectionRegistry()
+// registry is a shared singleton imported from connection-registry.ts
 
 // Heartbeat interval and missed-pong threshold
 const PING_INTERVAL_MS = 30_000
@@ -23,49 +23,20 @@ function sendError(socket: WebSocket, code: string, message: string) {
 }
 
 export async function registerRealtimeRoutes(app: FastifyInstance) {
-  app.get('/ws', { websocket: true }, async (socket, request) => {
-    // ── Auth ────────────────────────────────────────────────────────────
-    let userId: string
-    let email: string
-
-    if (config.SUPABASE_JWT_SECRET) {
-      // Production: verify Supabase JWT from Authorization header
-      const authHeader = (request.headers.authorization ?? '') as string
-      const token = authHeader.replace(/^Bearer\s+/i, '')
-      if (!token) {
-        sendError(socket, 'AUTH_REQUIRED', 'Authorization: Bearer <token> header required')
-        socket.close(1008, 'Unauthorized')
-        return
-      }
-      try {
-        const decoded = await request.jwtVerify<{ sub: string; email: string }>()
-        userId = decoded.sub
-        email = decoded.email
-      } catch {
-        sendError(socket, 'AUTH_INVALID', 'Invalid or expired token')
-        socket.close(1008, 'Unauthorized')
-        return
-      }
-    } else {
-      // Dev fallback: "pairId:userId:characterId" token in query string
-      const token = (request.query as Record<string, string>)['token'] ?? ''
-      const parts = token.split(':')
-      if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
-        sendError(socket, 'AUTH_REQUIRED', 'Dev mode: ?token=pairId:userId:characterId')
-        socket.close(1008, 'Unauthorized')
-        return
-      }
-      const [devPairId, devUserId] = parts
-      const conn = { pairId: devPairId, userId: devUserId, characterId: devUserId, socket }
-      registry.register(conn)
-      app.log.info({ pairId: devPairId, userId: devUserId }, 'ws:connected (dev)')
-      sendJson(socket, { version: 1, type: 'session.ready', payload: { pairId: devPairId } })
-      attachHandlers(socket, conn, app)
-      return
-    }
+  app.get('/ws', { websocket: true, preHandler: [app.authenticate] }, async (socket, request) => {
+    const { id: userId } = request.authUser
 
     // ── Pair lookup ─────────────────────────────────────────────────────
-    const pairId = await pairingService.getPairId(userId)
+    let pairId: string | null = null
+
+    // Dev bypass: accept ?devPairId= to skip DB when DATABASE_URL is not set
+    const devPairId = (request.query as Record<string, string>)['devPairId']
+    if (config.APP_ENV === 'development' && devPairId) {
+      pairId = devPairId
+    } else {
+      pairId = await pairingService.getPairId(userId)
+    }
+
     if (!pairId) {
       sendError(socket, 'NOT_PAIRED', 'Accept an invite before connecting')
       socket.close(1008, 'Not paired')
@@ -76,6 +47,19 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
     registry.register(conn)
     app.log.info({ pairId, userId }, 'ws:connected')
     sendJson(socket, { version: 1, type: 'session.ready', payload: { pairId } })
+
+    // Deliver any messages that arrived while the user was offline
+    if (config.DATABASE_URL?.includes('.pooler.supabase.com') || config.DATABASE_URL?.includes('localhost')) {
+      const pending = await messageService.getPendingFor(userId, pairId).catch(() => [])
+      for (const msg of pending) {
+        sendJson(socket, {
+          version: 1, type: 'message.sent',
+          eventId: msg.id, pairId, actorId: msg.senderId,
+          deviceId: 'server', sequence: 0, sentAt: msg.createdAt.toISOString(),
+          payload: { messageId: msg.id, content: msg.content, sentAt: msg.createdAt.toISOString() },
+        })
+      }
+    }
 
     attachHandlers(socket, conn, app)
   })
@@ -130,6 +114,13 @@ function attachHandlers(socket: WebSocket, conn: ConnMeta, app: FastifyInstance)
 
     // Drop heartbeats — they're handled at the transport level
     if (envelope.type === 'heartbeat') return
+
+    // message.ack: recipient confirms receipt — delete from DB
+    if (envelope.type === 'message.ack') {
+      const { messageId } = (envelope as { payload: { messageId: string } }).payload
+      void messageService.deleteOnAck(messageId, conn.userId).catch(() => {})
+      return
+    }
 
     if (!validateOwnership(envelope, conn)) {
       app.log.warn({ type: envelope.type, userId: conn.userId }, 'ws:ownership_violation')

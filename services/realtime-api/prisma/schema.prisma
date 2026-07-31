@@ -16,6 +16,7 @@ model Profile {
 
   pairMembership PairMember?
   invitesCreated Invite[]
+  messagesSent   Message[]
 
   @@map("profiles")
 }
@@ -41,6 +42,7 @@ model Pair {
   id        String       @id @default(uuid())
   members   PairMember[]
   invites   Invite[]
+  messages  Message[]
   createdAt DateTime     @default(now()) @map("created_at")
 
   @@map("pairs")
@@ -57,4 +59,19 @@ model PairMember {
 
   @@id([pairId, userId])
   @@map("pair_members")
+}
+
+// Ephemeral message — hard-deleted when the recipient reads it.
+model Message {
+  id        String   @id @default(uuid())
+  pairId    String
+  senderId  String
+  content   String   @db.VarChar(140)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  pair   Pair    @relation(fields: [pairId], references: [id])
+  sender Profile @relation(fields: [senderId], references: [id])
+
+  @@index([pairId, senderId])
+  @@map("messages")
 }

@@ -10,8 +10,9 @@ const ConfigSchema = z.object({
     .enum(["fatal", "error", "warn", "info", "debug", "trace"])
     .default("info"),
   DATABASE_URL: z.string().optional(),
-  // Found in Supabase Dashboard → Project Settings → API → JWT Secret
-  SUPABASE_JWT_SECRET: z.string().min(32).optional(),
+  // Found in Supabase Dashboard → Project Settings → API
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_ANON_KEY: z.string().optional(),
 });
 
 function loadConfig() {
